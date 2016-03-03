@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>GeoTOP Excavator</title>
+
+<link href="src/ol.css" rel="stylesheet" type="text/css">
+<link href="src/charts.css" rel="stylesheet" type="text/css">
+<script src="src/ol.js"></script>
+<script src="src/d3.min.js"></script>
+<script src="src/charts.js"></script>
+<script src="src/spin.min.js"></script>
+
+<style>
+#map {
+	height: 100%;
+	width: 100%;
+	position: absolute;
+	top: 0px; bottom: 0px; left: 0px; right: 0px;
+}
+
+.ol-scale-line {
+	left: auto;
+	right: 80px;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	font: normal 14px/16px 'Source Sans Pro', 'Helvetica', sans-serif;
+	color: white;
+}
+
+#map-ui {
+	background: rgba(0, 0, 0, .7);
+	opacity: 0.9;
+	width: 200px;
+	z-index: 9;
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	bottom: 0px;
+	padding: 20px;
+}
+
+.z-input {
+	width: 40px;
+}
+
+#layer-select {
+	z-index: 10;
+	position: absolute;
+	background: rgb(255, 255, 255);
+	bottom: 20px;
+}
+
+.tabgroup {
+	display: none;
+}
+
+.tab {
+	display: table-cell;
+	color: #999;
+	font: 12px sans-serif;
+	text-decoration: none;
+	padding: 0.5em;
+	margin: 0;
+	border: 1px outset #999;
+	border-bottom: 1px outset white;
+}
+
+.tab.selected {
+	color: white;
+	font-weight: bold;
+	border: 1px outset white;
+	border-bottom: none;
+}
+
+.tab.margin {
+	display: table-cell;
+	color: rgba(0, 0, 0, 0);
+	border: none;
+	border-bottom: 1px outset white;
+}
+
+.tabcontent {
+	border: none;
+	border-bottom: 1px outset white;
+}
+
+.dialog-container {
+	display: none;
+	background: rgba(0, 0, 0, .4);
+	width: 100%;
+	height: 100%;
+	left: 0px;
+	position: fixed;
+	z-index: 999;
+}
+
+.dialog {
+	display: block;
+	position: absolute;
+	background: rgb(220, 220, 220);
+	top: 50%; left: 50%;
+	transform: translate(-50%,-50%);
+	width: 400px;
+	height: 200px;
+	padding: 20px;
+	border-radius: 20px;
+	color: black;
+}
+
+.dialog-text {
+	position: absolute;
+	top: 40%; left: 50%;
+	transform: translate(-50%,-50%);
+}
+
+.dialog-close {
+	cursor: pointer;
+	cursor: hand;
+	text-decoration:none;
+	float:right;
+	font-size:24px;
+	font-weight:bold;
+	color:inherit
+}
+
+</style>
+<script>
+var map;
+var mapLayers = [];
+var mapFeatures;
+var mapModify;
+var bingStyles = [
+	'Road',
+	'Aerial',
+	'AerialWithLabels'
+];
+
+var geotopData = [];
+var activeChart = 'volumeChart';
+
+function loadMap() {
+	var i, ii;
+	for (i = 0, ii = bingStyles.length; i < ii; ++i) {
+		mapLayers.push(new ol.layer.Tile({
+			visible: false,
+			preload: Infinity,
+			source: new ol.source.BingMaps({
+				key: 'AtPbSoOI12-0iqUFoSjzf7rl7xjeAxGsHtCNhpDrNpp_yEFLAy49DcDoxORdSylN',
+				imagerySet: bingStyles[i],
+				// use maxZoom 19 to see stretched tiles instead of the BingMaps
+				// "no photos at this zoom level" tiles
+				maxZoom: 19
+			})
+		}));
+	}
+
+	var scaleLine = new ol.control.ScaleLine();
+	map = new ol.Map({
+		layers: mapLayers,
+		// Improve user experience by loading tiles while dragging/zooming. Will make
+		// zooming choppy on mobile or slow devices.
+		loadTilesWhileInteracting: true,
+		target: 'map',
+		controls: ol.control.defaults({
+			attribution: true,
+			zoom: false,
+			rotate: false
+		}).extend([scaleLine]),
+		view: new ol.View({
+			projection: 'EPSG:3857',
+			center: [545488, 6863373],
+			zoom: 13
+		})
+	});
+
+	var geotop_outline = new ol.layer.Vector({
+		source: new ol.source.Vector({
+			projection: 'EPSG:3857',
+			format: new ol.format.KML(),
+			url: 'data/geotop_outline.kml'
+		})
+	});
+	geotop_outline.setMap(map);
+
+	mapFeatures = new ol.Collection();
+	var featureOverlay = new ol.layer.Vector({
+		source: new ol.source.Vector({
+			features: mapFeatures
+		}),
+		style: new ol.style.Style({
+			fill: new ol.style.Fill({
+				color: 'rgba(255, 255, 255, 0.2)'
+			}),
+			stroke: new ol.style.Stroke({
+				color: '#ffcc33',
+				width: 2
+			}),
+			image: new ol.style.Circle({
+				radius: 7,
+				fill: new ol.style.Fill({
+					color: '#ffcc33'
+				})
+			})
+		})
+	});
+	featureOverlay.setMap(map);
+	setBaseMap();
+}
+
+function setBaseMap() {
+	var select = document.getElementById('layer-select');
+	var style = select.value;
+	for (var i = 0, ii = mapLayers.length; i < ii; ++i) {
+		mapLayers[i].setVisible(bingStyles[i] === style);
+	}
+}
+
+/*var mapModify = new ol.interaction.Modify({
+features: features,
+// the SHIFT key must be pressed to delete vertices, so
+// that new vertices can be drawn at the same position
+// of existing vertices
+deleteCondition: function(event) {
+  return ol.events.condition.shiftKeyOnly(event) &&
+	  ol.events.condition.singleClick(event);
+}
+});
+map.addInteraction(mapModify);
+*/
+
+function setDoubleClickZoom(value) {
+	var interactions = map.getInteractions();
+	for (var i = 0; i < interactions.getLength(); i++) {
+		var interaction = interactions.item(i);
+		if (interaction instanceof ol.interaction.DoubleClickZoom) {
+			interaction.setActive(value);
+		}
+	}
+}
+
+function draw_outline() {
+	hideChart();
+	
+	mapFeatures.clear();
+	if (mapModify) {
+		map.removeInteraction(mapModify);
+		mapModify = null;
+	}
+	document.getElementById("excavate").disabled = true;
+	setDoubleClickZoom(false);
+	var mapDraw = new ol.interaction.Draw({
+		features: mapFeatures,
+		type: 'Polygon'
+	});
+	drawEnd = function(event) {
+		//var feature = event.feature
+		map.removeInteraction(mapDraw);
+		document.getElementById("excavate").disabled = false;
+
+		mapModify = new ol.interaction.Modify({
+			features: mapFeatures,
+			// the SHIFT key must be pressed to delete vertices, so
+			// that new vertices can be drawn at the same position
+			// of existing vertices
+			deleteCondition: function(event) {
+				return ol.events.condition.shiftKeyOnly(event) &&
+					ol.events.condition.singleClick(event);
+			}
+		});
+		map.addInteraction(mapModify);
+
+		// need to set this ater a time out or zoom will trigger
+		setTimeout(function() {
+			setDoubleClickZoom(true)
+		}, 300);
+	}
+	mapDraw.on('drawend', drawEnd);
+	map.addInteraction(mapDraw);
+}
+
+function excavate() {
+	if (mapFeatures.getLength() == 0) {
+		alertDialog("Outline has not been set!");
+		return;
+	}
+	
+	var upperZ = parseFloat(document.getElementById("upperZ").value),
+		lowerZ = parseFloat(document.getElementById("lowerZ").value);
+	if (upperZ <= lowerZ) {
+		alertDialog("Maximum depth should be lower than minimum depth.");
+		return;
+	}
+	
+	var feature = mapFeatures.item(0);
+	
+	// calculate volume to be excavated
+	var sourceProj = map.getView().getProjection(),
+		polygon = feature.getGeometry(),
+		geom = (polygon.clone().transform(sourceProj, 'EPSG:4326')),
+		coordinates = geom.getLinearRing(0).getCoordinates(),
+		wgs84Sphere = new ol.Sphere(6378137),
+		area = Math.abs(wgs84Sphere.geodesicArea(coordinates)),
+		volume = area * (upperZ - lowerZ);
+	if (volume > 500.0e6) {
+		alertDialog("Volume " + d3.format(',.0f')(volume) + 
+					" exceeds 500 million m3. Please choose a smaller area or depth range.");
+		return;
+	}
+
+	var geoJSON = new ol.format.GeoJSON(),
+		json_string = geoJSON.writeGeometry(polygon),
+		upperZ = document.getElementById("upperZ").value,
+		lowerZ = document.getElementById("lowerZ").value,
+		request_url = "data/calcvolume.php?" +
+						"geom=" + json_string + "&" +
+						"lowerZ=" + lowerZ + "&" +
+						"upperZ=" + upperZ;
+
+	var callback = function(error, data) {
+		document.getElementById("excavate").disabled = false;
+		spinner.stop();
+		if (error) {
+			hideChart();
+			alertDialog("Error fetching data from database.");
+			return;
+		}
+
+		showChart();
+		geotopData = data;
+		makeChart();
+	}
+
+	document.getElementById("excavate").disabled = true;
+
+	dimChart();
+	startspinner();
+	d3.json(request_url, callback);
+}
+
+function hideChart() {
+	d3.select(".tabgroup").style( {display: 'none'} );
+	d3.selectAll('.volumeChart, .depthChart')
+		.transition().duration(400).ease("linear")
+		.style({
+			display: "none"
+		});
+	d3.select('#map-ui')
+		.transition().duration(800).ease("exp-out")
+		.style("width", "200px");
+}
+
+function showChart() {
+	d3.select(".tabgroup").style( {display: 'block'} );
+	d3.select('.' + activeChart)
+		.transition().duration(400).ease("linear")
+		.style({
+			opacity: 1.0,
+			display: "block"
+		});
+	d3.select('#map-ui')
+		.transition().duration(800).ease("exp-out")
+		.style("width", "450px");
+}
+
+function dimChart() {
+	var svg = d3.select('.' + activeChart);
+	if (svg.style("opacity") > 0)
+		svg.style({opacity: 0.3});
+}
+
+function switchChart(type) {
+	if (type == activeChart) 
+		return;
+	
+	d3.select('.' + activeChart).style({ display: "none" });
+	d3.select('#tab-' + activeChart).attr("class", "tab");
+	activeChart = type;
+	d3.select('.' + activeChart).style({ display: "block" });
+	d3.select('#tab-' + activeChart).attr("class", "tab selected");
+	
+	makeChart();
+}
+
+function makeChart() {
+	if (activeChart == 'volumeChart')
+		makeVolumeChart();
+	else
+		makeDepthChart();
+}
+
+var lithoclasses = {
+	0: {
+		name: 'Antropogeen',
+		color: '#c1c3c6'
+	},
+	1: {
+		name: 'Veen',
+		color: '#985045'
+	},
+	2: {
+		name: 'Klei',
+		color: '#189f48'
+	},
+	3: {
+		name: 'Zandige klei',
+		color: '#b6d169'
+	},
+	5: {
+		name: 'Fijn zand',
+		color: '#fff000'
+	},
+	6: {
+		name: 'Matig grof zand',
+		color: '#ffdc00'
+	},
+	7: {
+		name: 'Grof zand',
+		color: '#ffc800'
+	},
+	8: {
+		name: 'Grind',
+		color: '#ffb400'
+	},
+	11: {
+		name: 'Kalksteen',
+		color: '#0088ff'
+	}
+};
+
+var volumeChart;
+function makeVolumeChart() {
+	var data = {};
+	
+	for (var i = 0; i < geotopData.length; i++) {
+		var entry = geotopData[i],
+			lithoclass = entry[0],
+			z = entry[1],
+			volume = entry[2];
+		if (!data[lithoclass]) {
+			data[lithoclass] = {
+				'name': lithoclasses[lithoclass]['name'],
+				'value': volume,
+				'color': lithoclasses[lithoclass]['color']
+			};
+		} else {
+			data[lithoclass].value += volume;
+		}
+	}
+
+	var volumeChartData = Object.keys(data).map(function(d) { return data[d]; })
+							.sort( function(a, b) { return b.value - a.value; });
+	
+	console.log(volumeChartData);
+	
+	var chartConfig = {
+		margin: {top: 20, right: 40, bottom: 60, left: 130},
+		width: 440,
+		height: 320,
+		xLabel: { dist: 40, label: "Volume (m3)"},
+		yLabel: { dist: 110, label: "Lithoclass"}
+	};
+
+	showChart();
+
+	if (!volumeChart)
+		volumeChart = new VolumeChart('.volumeChart', chartConfig);
+
+	volumeChart.update(volumeChartData);
+}
+
+var depthChart;
+function makeDepthChart() {
+	var data = {},
+		lithos = Object.keys(lithoclasses).sort(),
+		upperZ = -9999999,
+		lowerZ =  9999999;
+	
+	for (var i = 0; i < geotopData.length; i++) {
+		var entry = geotopData[i];
+		var lithoclass = entry[0];
+		var z = entry[1];
+		upperZ = Math.max(upperZ, z);
+		lowerZ = Math.min(lowerZ, z);
+		var volume = entry[2];
+		if (!data[lithoclass]) data[lithoclass] = {};
+		data[lithoclass][z] = volume;
+	}
+	
+	var depthChartData = [];
+	for (var i = 0; i < lithos.length; i++) {
+		var lithoclass = lithos[i];
+		var values = [];
+		for (var z = upperZ; z >= lowerZ; z = z - 0.5) {
+			var volume = (data[lithoclass] && data[lithoclass][z]) ? data[lithoclass][z] : 0;
+			values.push( { z: +z, volume: +volume } );
+		}
+		depthChartData.push({
+			name: lithoclasses[lithoclass]['name'],
+			color: lithoclasses[lithoclass]['color'],
+			values: values
+		});
+	}
+	
+	var chartConfig = {
+		margin: {top: 20, right: 40, bottom: 60, left: 70},
+		width: 440,
+		height: 320,
+		xLabel: { dist: 30, label: "Probability"},
+		yLabel: { dist: 50, label: "Depth"}
+	};
+	
+	showChart();
+
+	if (!depthChart)
+		depthChart = new DepthChart('.depthChart', chartConfig);
+
+	depthChart.update(depthChartData, upperZ, lowerZ);
+}
+	
+var spinner;
+function startspinner() {
+	var target = document.getElementById('map-ui');
+
+	if (spinner) {
+		spinner.spin(target);
+		return;
+	}
+
+	var opts = {
+		lines:		15, // The number of lines to draw
+		length:		28, // The length of each line
+		width:		9, // The line thickness
+		radius:		36, // The radius of the inner circle
+		scale:		0.5, // Scales overall size of the spinner
+		corners:	1, // Corner roundness (0..1)
+		color:		'#fff', // #rgb or #rrggbb or array of colors
+		opacity:	0.3, // Opacity of the lines
+		rotate:		0, // The rotation offset
+		direction:	1, // 1: clockwise, -1: counterclockwise
+		speed:		1, // Rounds per second
+		trail:		54, // Afterglow percentage
+		fps:		20, // Frames per second when using setTimeout() as a fallback for CSS
+		zIndex:		2e9, // The z-index (defaults to 2000000000)
+		className:	'spinner', // The CSS class to assign to the spinner
+		top:		'49%', // Top position relative to parent
+		left:		'50%', // Left position relative to parent
+		shadow:		false, // Whether to render a shadow
+		hwaccel:	false, // Whether to use hardware acceleration
+		position:	'absolute', // Element positioning
+	}
+
+	spinner = new Spinner(opts).spin(target);
+}
+
+function alertDialog(message) {
+	document.getElementById('dialog-text').innerHTML = message;
+	document.getElementById('dialog').style.display = 'block';
+}
+</script>
+
+</head>
+
+<body>
+	<div id="map" class="map">
+		<div id="map-ui">
+			<h2>GeoTOP Excavator</h2>
+			<div>
+				Minimum depth<br><input class="z-input" size="3" id="upperZ" type="number" value="0">&nbsp;NAP<br><br>
+				Maximum depth<br><input class="z-input" size="3" id="lowerZ" type="number" value="-15">&nbsp;NAP<br><br>
+				<button id="outline" onClick="draw_outline()">Draw outline</button>&nbsp;&nbsp;
+				<button id="excavate" onClick="excavate()" disabled>Excavate</button>
+				<br><br>
+			</div>
+			<div class="tabgroup">
+				<div class="tab margin" style="width: 20px"></div><a id="tab-volumeChart" class="tab selected" href="#" onClick="switchChart('volumeChart')">Volume&nbsp;Chart
+				</a><div class="tab margin" style="width: 20px"></div><a id="tab-depthChart" class="tab" href="#" onClick="switchChart('depthChart')">Depth&nbsp;Chart
+				</a><div class="tab margin" style="width: 100%"></div>
+				<div class="tabcontent">
+					<svg class="volumeChart"/>
+					<svg class="depthChart"/>
+				</div>
+			</div>
+			<select id="layer-select" onChange="setBaseMap()">
+				 <option value="Aerial" selected>Aerial</option>
+				 <option value="AerialWithLabels">Aerial with labels</option>
+				 <option value="Road">Road</option>
+			</select>
+		</div>
+	</div>
+	<div id="dialog" class="dialog-container">
+		<div class="dialog">
+			<span onclick="document.getElementById('dialog').style.display='none'" class="dialog-close">&times;</span>
+			<p id="dialog-text" class="dialog-text">Text</p>
+		</div>
+	</div>
+	<script>
+		loadMap();
+	</script>
+</body>
+
+</html>

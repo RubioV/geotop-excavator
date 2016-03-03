@@ -1,0 +1,53 @@
+div.tooltip {
+	display: inline-block;
+	z-index: 99;
+	color: black;
+	position: absolute;
+	opacity: 0;
+	transform: translate(5%,-20%);
+	padding: 8px;
+	font: 12px sans-serif;
+	background: rgba(255,255,255,0.9);
+	border: 1px solid grey;
+	border-radius: 4px;
+	pointer-events: none;
+}
+
+div.tooltip text {
+	padding: 8px;
+}
+
+.volumeChart,
+.depthChart {
+	display: none;
+}
+
+.volumeChart rect {
+	opacity: 0.8;
+}
+
+.volumeChart text {
+	fill: white;
+	font: 12px sans-serif;
+	text-anchor: end;
+}
+
+.depthChart text {
+	fill: white;
+	font: 12px sans-serif;
+	text-anchor: end;
+}
+
+.label text,
+.axis text {
+	fill: white;
+	font: 12px sans-serif;
+}
+
+.axis path,
+.axis line {
+	fill: none;
+	opacity: 0.8;
+	stroke: white;
+	shape-rendering: crispEdges;
+}
