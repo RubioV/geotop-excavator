@@ -454,8 +454,6 @@ function makeVolumeChart() {
 	var volumeChartData = Object.keys(data).map(function(d) { return data[d]; })
 							.sort( function(a, b) { return b.value - a.value; });
 	
-	console.log(volumeChartData);
-	
 	var chartConfig = {
 		margin: {top: 20, right: 40, bottom: 60, left: 130},
 		width: 440,
