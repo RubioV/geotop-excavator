@@ -88,7 +88,7 @@ body {
 	border-bottom: 1px outset white;
 }
 
-.dialog-container {
+.modal-container {
 	display: none;
 	background: rgba(0, 0, 0, .4);
 	width: 100%;
@@ -256,6 +256,7 @@ function draw_outline() {
 		features: mapFeatures,
 		type: 'Polygon'
 	});
+	
 	drawEnd = function(event) {
 		//var feature = event.feature
 		map.removeInteraction(mapDraw);
@@ -271,13 +272,16 @@ function draw_outline() {
 					ol.events.condition.singleClick(event);
 			}
 		});
+		mapModify.on('modifyend', function(event) { excavate(); });
 		map.addInteraction(mapModify);
 
 		// need to set this ater a time out or zoom will trigger
 		setTimeout(function() {
-			setDoubleClickZoom(true)
+			setDoubleClickZoom(true);
+			excavate();
 		}, 300);
-	}
+	};
+	
 	mapDraw.on('drawend', drawEnd);
 	map.addInteraction(mapDraw);
 }
@@ -322,7 +326,7 @@ function excavate() {
 
 	var callback = function(error, data) {
 		document.getElementById("excavate").disabled = false;
-		spinner.stop();
+		stopSpinner();
 		if (error) {
 			hideChart();
 			alertDialog("Error fetching data from database.");
@@ -521,8 +525,9 @@ function makeDepthChart() {
 	
 var spinner;
 function startspinner() {
-	var target = document.getElementById('map-ui');
-
+	var target = document.getElementById('spinner-container');
+	target.style.display = 'block';
+	
 	if (spinner) {
 		spinner.spin(target);
 		return;
@@ -554,9 +559,13 @@ function startspinner() {
 	spinner = new Spinner(opts).spin(target);
 }
 
+function stopSpinner() {
+	document.getElementById('spinner-container').style.display = 'none';
+}
+
 function alertDialog(message) {
 	document.getElementById('dialog-text').innerHTML = message;
-	document.getElementById('dialog').style.display = 'block';
+	document.getElementById('dialog-container').style.display = 'block';
 }
 </script>
 
@@ -570,7 +579,7 @@ function alertDialog(message) {
 				Minimum depth<br><input class="z-input" size="3" id="upperZ" type="number" value="0">&nbsp;NAP<br><br>
 				Maximum depth<br><input class="z-input" size="3" id="lowerZ" type="number" value="-15">&nbsp;NAP<br><br>
 				<button id="outline" onClick="draw_outline()">Draw outline</button>&nbsp;&nbsp;
-				<button id="excavate" onClick="excavate()" disabled>Excavate</button>
+				<button id="excavate" onClick="excavate()" disabled>Recalculate</button>
 				<br><br>
 			</div>
 			<div class="tabgroup">
@@ -589,9 +598,10 @@ function alertDialog(message) {
 			</select>
 		</div>
 	</div>
-	<div id="dialog" class="dialog-container">
+	<div id="spinner-container" class="modal-container">&nbsp;</div>
+	<div id="dialog-container" class="modal-container">
 		<div class="dialog">
-			<span onclick="document.getElementById('dialog').style.display='none'" class="dialog-close">&times;</span>
+			<span onclick="document.getElementById('dialog-container').style.display='none'" class="dialog-close">&times;</span>
 			<p id="dialog-text" class="dialog-text">Text</p>
 		</div>
 	</div>
