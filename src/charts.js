@@ -248,7 +248,7 @@ DepthChart.prototype.toolTipHTML = function(d) {
 	if (zIndex > 0)
 		zIndex = Math.abs(zMouse - zValues[zIndex - 1]) < Math.abs(zMouse - zValues[zIndex]) ? zIndex - 1 : zIndex;
 	
-	var html = '\x3Cstrong>Depth: ' + zValues[zIndex] + 'm NAP\x3Cstrong><br>';
+	var html = '\x3Cstrong>Depth: ' + (zValues[zIndex]-0.25) + 'm to ' + (zValues[zIndex]+0.25) + 'm NAP\x3Cstrong><br>';
 	
 	for (var i = 0; i < this.data.length; i++) {
 		var	name = this.data[i].name,
