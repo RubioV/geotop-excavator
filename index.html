@@ -298,6 +298,10 @@ function excavate() {
 		alertDialog("Maximum depth should be lower than minimum depth.");
 		return;
 	}
+	if (upperZ < -50 || lowerZ < -50) {
+		alertDialog("Depth should not exceed -50m NAP.");
+		return;
+	}
 	
 	var feature = mapFeatures.item(0);
 	
