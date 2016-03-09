@@ -1,28 +1,33 @@
 
+// VolumeChart: plot volumes of lithoclasses in a horizontal bar chart.
 function VolumeChart (svg, config) {
 	this.svg = svg;
+
 	if (!config) config = {};
 	this.config = config;
 	
+	// set up dimensions and margins
 	this.margin = config.margin ? config.margin : {top: 80, right: 80, bottom: 80, left: 120};
-	
 	this.width = config.width ? config.width : 640;
 	this.width = this.width - this.margin.left - this.margin.right;
 	this.height = config.height ? config.height : 500;
 	this.height = this.height - this.margin.top - this.margin.bottom;
 
+	// Set svg dimensions and add inner chart group
 	this.chart = d3.select(svg)
 			.attr("width", this.width + this.margin.left + this.margin.right)
 			.attr("height", this.height + this.margin.top + this.margin.bottom)
 		.append("g")
+			.attr('class', 'innerChart')
 			.attr("transform", "translate(" + this.margin.left + "," + this.margin.top + ")");
-		
+	
+	// the scale functions convert data units to screen units
 	this.xScale = d3.scale.linear()
 			.range([0, this.width]);
-
 	this.yScale = d3.scale.ordinal()
 			.rangeRoundBands([0, this.height], 0.2, 0.2);
 
+	// set up the axes
 	this.xAxis = d3.svg.axis()
 		.scale(this.xScale)
 		.tickSize(-this.height, 0)
@@ -68,6 +73,7 @@ function VolumeChart (svg, config) {
 
 }
 
+// VolumeChart.toolTipHTML - provide the HTML content of the tooltip
 VolumeChart.prototype.toolTipHTML = function(d) {
 	var html = '\x3Csvg width="18" height="18">' +
 		'\x3Crect x="1" y="1" width="16" height="16" style="stroke-width:1;stroke:grey;fill: ' +
@@ -76,26 +82,30 @@ VolumeChart.prototype.toolTipHTML = function(d) {
 	return html;
 }
 
+// VolumeChart.update - update the chart with the provided data
 VolumeChart.prototype.update = function(data) {
 	var xScale = this.xScale;
 	var yScale = this.yScale;
 	var tooltip = this.tooltip;
 	var volumeChartObj = this;
 	
+	// adjust the scale functions to the input data
 	xScale.domain([0, d3.max(data, function(d) { return d.value; })]);
 	yScale.domain(data.map(function(d) { return d.name; }));
 	
 	var barHeight = this.height / data.length;
 	var barGap = Math.round(barHeight * 0.2);
 	
-	var rects = this.chart.selectAll("rect").data(data, function(d) { return d.name; } );
-	var newRects = rects.enter();
-	var delRects = rects.exit();
+	// select all existing or potential rects, D3 joined to the data
+	var rects = this.chart.selectAll("rect").data(data, function(d) { return d.name; } ); 
+	var newRects = rects.enter(); // all new data entries
+	var delRects = rects.exit(); // all deleted data entries
 	
+	// append svg rects for all new entries
 	newRects.append('rect')
 			.attr('x', xScale(0))
 			.attr('y', function(d) { return yScale(d.name); } )
-			.attr('width', 0)
+			.attr('width', 0) // start with width of 0 and transition to correct width below
 			.attr('height', yScale.rangeBand())
 			.style({ 'fill': function(d) { return d.color; } })
 			.on("mousemove", function(d) {
@@ -112,8 +122,10 @@ VolumeChart.prototype.update = function(data) {
 						.style("opacity", 0);
 				});
 	
+	// remove svg rects for data entries which were deleted
 	delRects.remove();
-		
+	
+	// update dimensions of rects to new values, using transition
 	rects.transition()
 		.duration(1000)
 		.attr('y', function(d) { return yScale(d.name); } )
@@ -121,6 +133,7 @@ VolumeChart.prototype.update = function(data) {
 		.attr('height', yScale.rangeBand())
 		.style({ 'fill': function(d) { return d.color; } });
 	
+	// update chart ranges to input data ranges, using transition
 	this.xAxis.scale(xScale);
 	this.chart.selectAll("g.x.axis")
 		.transition()
@@ -137,20 +150,23 @@ VolumeChart.prototype.update = function(data) {
 
 /*******************************************************************************/
 
+// DepthChart: plot depth/z on y axis versus relative probability of lithoclasses 
+// on the x axis. The chart area consists of a counter clockwise rotated stacked area.
 function DepthChart (svg, config) {
 	this.svg = svg;
+
 	if (!config) config = {};
 	this.config = config;
 	
+	// set up dimensions and margins
 	this.margin = {top: 80, right: 80, bottom: 80, left: 120};
-	if (config && config.margin)
-		this.margin = config.margin;
-	
+	this.margin = config.margin ? config.margin : {top: 80, right: 80, bottom: 80, left: 120};
 	this.width = (config.width) ? config.width : 640;
 	this.width = this.width - this.margin.left - this.margin.right;
 	this.height = (config.height) ? config.height : 500;
 	this.height = this.height - this.margin.top - this.margin.bottom;
 
+	// Set svg dimensions and add inner chart group
 	this.chart = d3.select(svg)
 			.attr("width", this.width + this.margin.left + this.margin.right)
 			.attr("height", this.height + this.margin.top + this.margin.bottom)
@@ -158,21 +174,15 @@ function DepthChart (svg, config) {
 			.attr('class', 'innerChart')
 			.attr("transform", "translate(" + this.margin.left + "," + this.margin.top + ")");
 		
+	// the scale functions convert data units to screen units
 	var xScale = d3.scale.linear()
 			.range([0, this.width]);
 	this.xScale = xScale;
-	
 	var yScale = d3.scale.linear()
 			.range([0, this.height]);
 	this.yScale = yScale;
 
-	/*this.xAxis = d3.svg.axis()
-		.scale(this.xScale)
-		.tickSize(-this.height, 0)
-		.ticks(4)
-		.orient("bottom");	
-	*/
-
+	// set up the axes
 	if (config.xLabel) {
 		var xTrans = (this.margin.left + this.width) / 2;
 		var yTrans = this.height + config.xLabel.dist;
@@ -182,12 +192,6 @@ function DepthChart (svg, config) {
 			.attr('text-anchor', 'middle')
 			.text(config.xLabel.label);
 	}
-	
-	/*this.chart.append("g")
-		.attr("class", "x axis")
-		.attr("transform", "translate(0," + this.height + ")")
-		.call(this.xAxis);
-	*/
 	
 	this.yAxis = d3.svg.axis()
 		.scale(this.yScale)
@@ -208,9 +212,7 @@ function DepthChart (svg, config) {
 			.text(config.yLabel.label);
 	}
 
-	this.nest = d3.nest()
-		.key(function(d) { return d.name; });
-		
+	// Set up the stacked area
 	this.area = d3.svg.area()
 		.interpolate("basis")
 		.y(function(d) { return yScale(d.z); })
@@ -223,39 +225,37 @@ function DepthChart (svg, config) {
 		.x(function(d) { return d.z; })
 		.y(function(d) { return d.volume; });
 
+	this.bisectDepth = d3.bisector(function(d) { return d.z; }).left; // used for the tooltip
+
 	this.tooltip = d3.select("body").append("div")   
 		.attr("class", "tooltip");
-		
-	/*xScale.domain([0, 1]);
-	this.xAxis.scale(xScale);
-	this.chart.selectAll("g.x.axis")
-		.call(this.xAxis);
-	*/	
-	this.bisectDepth = d3.bisector(function(d) { return d.z; }).left;
 }
 
 
+// DepthChart.toolTipHTML - provide the HTML content of the tooltip
 DepthChart.prototype.toolTipHTML = function(d) {
 	var innerChart = d3.select('.innerChart').node();
 
-	var chartY = d3.mouse(innerChart)[1],
+	var chartY = d3.mouse(innerChart)[1], // get mouse position along y-axis
 		yScale = this.yScale;
-		zMouse = Math.max(Math.min(yScale.invert(chartY), this.upperZ), this.lowerZ);
-		zValues = d.values.map(function(d){ return d.z; }),
-		bisectDepth = d3.bisector(d3.descending).left,
-		zIndex = bisectDepth(zValues, zMouse);
+		zMouse = Math.max(Math.min(yScale.invert(chartY), this.upperZ), this.lowerZ); // convert mouse-y to z value (depth)
+		zValues = d.values.map(function(d){ return d.z; }), // get all z values for this chart shape
+		bisectDepth = d3.bisector(d3.descending).left, 
+		zIndex = bisectDepth(zValues, zMouse); // get index within zValues array for the zMouse value
 	
 	if (zIndex > 0)
+		// determine if we're closer to the left or right index within the zValues array
 		zIndex = Math.abs(zMouse - zValues[zIndex - 1]) < Math.abs(zMouse - zValues[zIndex]) ? zIndex - 1 : zIndex;
 	
 	var html = '\x3Cstrong>Depth: ' + (zValues[zIndex]-0.25) + 'm to ' + (zValues[zIndex]+0.25) + 'm NAP\x3Cstrong><br>';
 	
+	// loop over all lithoclasses and add an entry to the tooltip
 	for (var i = 0; i < this.data.length; i++) {
 		var	name = this.data[i].name,
 			color = this.data[i].color,
 			perc = this.data[i].values[zIndex].y * 100;
 		
-		if (perc == 0.0) continue;
+		if (perc == 0.0) continue; // skip lithoclasses which have zero probability
 		
 		html += '\x3Csvg width="18" height="18">' +
 			'\x3Crect x="1" y="1" width="16" height="16" style="stroke-width:1;stroke:grey;fill: ' +
@@ -264,7 +264,8 @@ DepthChart.prototype.toolTipHTML = function(d) {
 	}
 	return html;
 }
-	
+
+// DepthChart.update - update the chart with the provided data
 DepthChart.prototype.update = function(data, upperZ, lowerZ) {
 	this.data = data;
 	
@@ -275,17 +276,19 @@ DepthChart.prototype.update = function(data, upperZ, lowerZ) {
 	var stack = this.stack;
 	var tooltip = this.tooltip;
 	
+	// convert input data to stacked area data
 	var layers = stack(data);
 
+	// adjust the scale function to the input data
 	yScale.domain([upperZ, lowerZ]);
 
-	var paths = this.chart.selectAll(".layer")
-			.data(layers);
-			
-	var pathsEnter = paths.enter();
-	var pathsExit = paths.exit();
+	// select all existing or potential paths, D3 joined to the data
+	var paths = this.chart.selectAll(".layer").data(layers, function(d) { return d.name; } );
+	var newPaths = paths.enter(); // all new data entries
+	var delPaths = paths.exit(); // all deleted data entries
 	
-	pathsEnter.append("path")
+	// append svg paths for all new data entries
+	newPaths.append("path")
 			.attr("class", "layer")
 			.attr("d", function(d) { return area(d.values); })
 			.style("fill", function(d, i) { return d.color; })
@@ -303,14 +306,18 @@ DepthChart.prototype.update = function(data, upperZ, lowerZ) {
 						.style("opacity", 0);
 				});
 			
-	pathsExit.remove();
+	// remove svg paths for data entries which were deleted
+	delPaths.remove();
 	
 	if (upperZ == this.upperZ && lowerZ == this.lowerZ) {
+		// if depth range didn't change, animate paths change
 		paths.transition()
 			.duration(1000)
 			.attr("d", function(d) { return area(d.values); })
 			.style("fill", function(d, i) { return d.color; });
 	} else {
+		// if depth range did change, don't animate paths themselves (ugly)
+		// instead, have entire paths transition in from the right
 		paths.attr('transform', 'translate(' + 1.5 * this.width + ', 0)')
 			.attr("d", function(d) { return area(d.values); })
 			.style("fill", function(d, i) { return d.color; });
@@ -326,7 +333,8 @@ DepthChart.prototype.update = function(data, upperZ, lowerZ) {
 
 	this.upperZ = upperZ;
 	this.lowerZ = lowerZ;
-		
+	
+	// animate any chage of the depth axis
 	this.yAxis.scale(yScale);
 	this.chart.selectAll("g.y.axis")
 		.transition()

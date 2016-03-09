@@ -132,6 +132,7 @@ body {
 var map;
 var mapLayers = [];
 var mapFeatures;
+var featureOverlay;
 var mapModify;
 var bingStyles = [
 	'Road',
@@ -142,8 +143,12 @@ var bingStyles = [
 var geotopData = [];
 var activeChart = 'volumeChart';
 
+
+// loadMap() - Loads and configures the OpenLayers map
 function loadMap() {
 	var i, ii;
+
+	// Load the map styles
 	for (i = 0, ii = bingStyles.length; i < ii; ++i) {
 		mapLayers.push(new ol.layer.Tile({
 			visible: false,
@@ -158,11 +163,10 @@ function loadMap() {
 		}));
 	}
 
+	// Create the map
 	var scaleLine = new ol.control.ScaleLine();
 	map = new ol.Map({
 		layers: mapLayers,
-		// Improve user experience by loading tiles while dragging/zooming. Will make
-		// zooming choppy on mobile or slow devices.
 		loadTilesWhileInteracting: true,
 		target: 'map',
 		controls: ol.control.defaults({
@@ -177,6 +181,7 @@ function loadMap() {
 		})
 	});
 
+	// Add outline of GeoTOP extent to the map
 	var geotop_outline = new ol.layer.Vector({
 		source: new ol.source.Vector({
 			projection: 'EPSG:3857',
@@ -186,14 +191,15 @@ function loadMap() {
 	});
 	geotop_outline.setMap(map);
 
+	// Add the feature overlay to the map
 	mapFeatures = new ol.Collection();
-	var featureOverlay = new ol.layer.Vector({
+	featureOverlay = new ol.layer.Vector({
 		source: new ol.source.Vector({
 			features: mapFeatures
 		}),
 		style: new ol.style.Style({
 			fill: new ol.style.Fill({
-				color: 'rgba(255, 255, 255, 0.2)'
+				color: 'rgba(255, 255, 255, 0.3)'
 			}),
 			stroke: new ol.style.Stroke({
 				color: '#ffcc33',
@@ -208,30 +214,34 @@ function loadMap() {
 		})
 	});
 	featureOverlay.setMap(map);
-	setBaseMap();
+	setMapStyle();
 }
 
-function setBaseMap() {
+// setMapStyle - sets or changes the Bing map style
+function setMapStyle() {
 	var select = document.getElementById('layer-select');
-	var style = select.value;
-	for (var i = 0, ii = mapLayers.length; i < ii; ++i) {
-		mapLayers[i].setVisible(bingStyles[i] === style);
+	var mapStyle = select.value;
+	for (var i = 0; i < mapLayers.length; i++) {
+		mapLayers[i].setVisible(bingStyles[i] == mapStyle);
 	}
+	if (mapStyle == 'Road') {
+		// darker polygon on light background
+		featureOverlay.getStyle().getFill().setColor('rgba(0, 0, 0, 0.3)');
+		featureOverlay.getStyle().getStroke().setColor('#1155cc');
+		featureOverlay.getStyle().getStroke().setWidth(2);
+		featureOverlay.getStyle().getImage().getFill().setColor('#1155cc');
+	} else {
+		// lighter polygon on dark background
+		featureOverlay.getStyle().getFill().setColor('rgba(255, 255, 255, 0.3)');
+		featureOverlay.getStyle().getStroke().setColor('#ffcc33');
+		featureOverlay.getStyle().getStroke().setWidth(2);
+		featureOverlay.getStyle().getImage().getFill().setColor('#ffcc33');
+	}
+	featureOverlay.changed();
 }
 
-/*var mapModify = new ol.interaction.Modify({
-features: features,
-// the SHIFT key must be pressed to delete vertices, so
-// that new vertices can be drawn at the same position
-// of existing vertices
-deleteCondition: function(event) {
-  return ol.events.condition.shiftKeyOnly(event) &&
-	  ol.events.condition.singleClick(event);
-}
-});
-map.addInteraction(mapModify);
-*/
-
+// setDoubleClickZoom - workaround for an OpenLayers bug which zooms the map 
+// when finishing drawing with a double click
 function setDoubleClickZoom(value) {
 	var interactions = map.getInteractions();
 	for (var i = 0; i < interactions.getLength(); i++) {
@@ -242,26 +252,28 @@ function setDoubleClickZoom(value) {
 	}
 }
 
-function draw_outline() {
+// drawOutline - draw the polygon outline of the area to be excavated
+function drawOutline() {
 	hideChart();
 	
-	mapFeatures.clear();
+	mapFeatures.clear(); // make sure we only have one polygon
 	if (mapModify) {
 		map.removeInteraction(mapModify);
 		mapModify = null;
 	}
 	document.getElementById("excavate").disabled = true;
-	setDoubleClickZoom(false);
+	setDoubleClickZoom(false); // workaround for OpenLayers double click zoom bug while drawing
 	var mapDraw = new ol.interaction.Draw({
 		features: mapFeatures,
 		type: 'Polygon'
 	});
 	
+	// drawEnd is called when drawing finishes
 	drawEnd = function(event) {
-		//var feature = event.feature
 		map.removeInteraction(mapDraw);
 		document.getElementById("excavate").disabled = false;
 
+		// set up modify interaction to allow modifying of polygon
 		mapModify = new ol.interaction.Modify({
 			features: mapFeatures,
 			// the SHIFT key must be pressed to delete vertices, so
@@ -275,10 +287,11 @@ function draw_outline() {
 		mapModify.on('modifyend', function(event) { excavate(); });
 		map.addInteraction(mapModify);
 
-		// need to set this ater a time out or zoom will trigger
+		// workaround for OpenLayers double click zoom bug while drawing
+		// need to set this after a time out or zoom will trigger
 		setTimeout(function() {
 			setDoubleClickZoom(true);
-			excavate();
+			excavate(); // also needs to be after time out, because in 'drawend', the feature doesn't exist yet.
 		}, 300);
 	};
 	
@@ -286,6 +299,10 @@ function draw_outline() {
 	map.addInteraction(mapDraw);
 }
 
+// excavate: 
+// - process and check user input 
+// - call the webservice which performs the calculation
+// - make charts based on the results
 function excavate() {
 	if (mapFeatures.getLength() == 0) {
 		alertDialog("Outline has not been set!");
@@ -319,8 +336,9 @@ function excavate() {
 		return;
 	}
 
+	
 	var geoJSON = new ol.format.GeoJSON(),
-		json_string = geoJSON.writeGeometry(polygon),
+		json_string = geoJSON.writeGeometry(polygon), // convert polygon to GeoJSON
 		upperZ = document.getElementById("upperZ").value,
 		lowerZ = document.getElementById("lowerZ").value,
 		request_url = "data/calcvolume.php?" +
@@ -344,9 +362,8 @@ function excavate() {
 
 	document.getElementById("excavate").disabled = true;
 
-	dimChart();
-	startspinner();
-	d3.json(request_url, callback);
+	startSpinner();
+	d3.json(request_url, callback); // make the REST call to the calcvolume service
 }
 
 function hideChart() {
@@ -374,19 +391,18 @@ function showChart() {
 		.style("width", "450px");
 }
 
-function dimChart() {
-	var svg = d3.select('.' + activeChart);
-	if (svg.style("opacity") > 0)
-		svg.style({opacity: 0.3});
-}
-
+// switchChart - switches to the specified chart type ('volumeChart' or 'depthChart')
 function switchChart(type) {
 	if (type == activeChart) 
 		return;
 	
+	// hide the current chart
 	d3.select('.' + activeChart).style({ display: "none" });
 	d3.select('#tab-' + activeChart).attr("class", "tab");
-	activeChart = type;
+	
+	activeChart = type; // switch to new chart type
+	
+	// show the new chart
 	d3.select('.' + activeChart).style({ display: "block" });
 	d3.select('#tab-' + activeChart).attr("class", "tab selected");
 	
@@ -400,6 +416,7 @@ function makeChart() {
 		makeDepthChart();
 }
 
+// map numeric lithoclasses to names and colors
 var lithoclasses = {
 	0: {
 		name: 'Antropogeen',
@@ -439,10 +456,12 @@ var lithoclasses = {
 	}
 };
 
+// makeVolumeChart - make or update the volume chart
 var volumeChart;
 function makeVolumeChart() {
 	var data = {};
 	
+	// convert geotop array to data dictionary with cumulative volumes
 	for (var i = 0; i < geotopData.length; i++) {
 		var entry = geotopData[i],
 			lithoclass = entry[0],
@@ -459,6 +478,7 @@ function makeVolumeChart() {
 		}
 	}
 
+	// convert data dictionary back to sorted array
 	var volumeChartData = Object.keys(data).map(function(d) { return data[d]; })
 							.sort( function(a, b) { return b.value - a.value; });
 	
@@ -470,7 +490,7 @@ function makeVolumeChart() {
 		yLabel: { dist: 110, label: "Lithoclass"}
 	};
 
-	showChart();
+	showChart(); // make sure chart is visible
 
 	if (!volumeChart)
 		volumeChart = new VolumeChart('.volumeChart', chartConfig);
@@ -478,6 +498,7 @@ function makeVolumeChart() {
 	volumeChart.update(volumeChartData);
 }
 
+// makeDepthChart - make or update the depth/probability chart
 var depthChart;
 function makeDepthChart() {
 	var data = {},
@@ -485,6 +506,7 @@ function makeDepthChart() {
 		upperZ = -9999999,
 		lowerZ =  9999999;
 	
+	// convert geotop array to data dictionary
 	for (var i = 0; i < geotopData.length; i++) {
 		var entry = geotopData[i];
 		var lithoclass = entry[0];
@@ -496,6 +518,7 @@ function makeDepthChart() {
 		data[lithoclass][z] = volume;
 	}
 	
+	// convert data dictionary back to array ready for depth chart
 	var depthChartData = [];
 	for (var i = 0; i < lithos.length; i++) {
 		var lithoclass = lithos[i];
@@ -526,9 +549,10 @@ function makeDepthChart() {
 
 	depthChart.update(depthChartData, upperZ, lowerZ);
 }
-	
+
+// startSpinner - display an animated spinner on screen
 var spinner;
-function startspinner() {
+function startSpinner() {
 	var target = document.getElementById('spinner-container');
 	target.style.display = 'block';
 	
@@ -563,10 +587,13 @@ function startspinner() {
 	spinner = new Spinner(opts).spin(target);
 }
 
+// stopSpinner - stop and remove spinner from screen
 function stopSpinner() {
+	spinner.stop();
 	document.getElementById('spinner-container').style.display = 'none';
 }
 
+// alertDialog - display a modal dialog on screen
 function alertDialog(message) {
 	document.getElementById('dialog-text').innerHTML = message;
 	document.getElementById('dialog-container').style.display = 'block';
@@ -582,7 +609,7 @@ function alertDialog(message) {
 			<div>
 				Minimum depth<br><input class="z-input" size="3" id="upperZ" type="number" value="0">&nbsp;NAP<br><br>
 				Maximum depth<br><input class="z-input" size="3" id="lowerZ" type="number" value="-15">&nbsp;NAP<br><br>
-				<button id="outline" onClick="draw_outline()">Draw outline</button>&nbsp;&nbsp;
+				<button id="outline" onClick="drawOutline()">Draw outline</button>&nbsp;&nbsp;
 				<button id="excavate" onClick="excavate()" disabled>Recalculate</button>
 				<br><br>
 			</div>
@@ -595,7 +622,7 @@ function alertDialog(message) {
 					<svg class="depthChart"/>
 				</div>
 			</div>
-			<select id="layer-select" onChange="setBaseMap()">
+			<select id="layer-select" onChange="setMapStyle()">
 				 <option value="Aerial" selected>Aerial</option>
 				 <option value="AerialWithLabels">Aerial with labels</option>
 				 <option value="Road">Road</option>
