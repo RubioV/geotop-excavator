@@ -26,12 +26,7 @@ div.tooltip text {
 	opacity: 0.8;
 }
 
-.volumeChart text {
-	fill: white;
-	font: 12px sans-serif;
-	text-anchor: end;
-}
-
+.volumeChart text,
 .depthChart text {
 	fill: white;
 	font: 12px sans-serif;

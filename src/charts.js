@@ -18,7 +18,6 @@ function VolumeChart (svg, config) {
 			.attr("width", this.width + this.margin.left + this.margin.right)
 			.attr("height", this.height + this.margin.top + this.margin.bottom)
 		.append("g")
-			.attr('class', 'innerChart')
 			.attr("transform", "translate(" + this.margin.left + "," + this.margin.top + ")");
 	
 	// the scale functions convert data units to screen units
@@ -171,7 +170,6 @@ function DepthChart (svg, config) {
 			.attr("width", this.width + this.margin.left + this.margin.right)
 			.attr("height", this.height + this.margin.top + this.margin.bottom)
 		.append("g")
-			.attr('class', 'innerChart')
 			.attr("transform", "translate(" + this.margin.left + "," + this.margin.top + ")");
 		
 	// the scale functions convert data units to screen units
@@ -234,9 +232,7 @@ function DepthChart (svg, config) {
 
 // DepthChart.toolTipHTML - provide the HTML content of the tooltip
 DepthChart.prototype.toolTipHTML = function(d) {
-	var innerChart = d3.select('.innerChart').node();
-
-	var chartY = d3.mouse(innerChart)[1], // get mouse position along y-axis
+	var chartY = d3.mouse(this.chart.node())[1], // get mouse position along y-axis
 		yScale = this.yScale;
 		zMouse = Math.max(Math.min(yScale.invert(chartY), this.upperZ), this.lowerZ); // convert mouse-y to z value (depth)
 		zValues = d.values.map(function(d){ return d.z; }), // get all z values for this chart shape
