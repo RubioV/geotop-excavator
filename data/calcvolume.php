@@ -10,9 +10,9 @@ if (!$conn) {
   echo "Unable to connect to the database\n";
   exit;
 }
-$query = "
+$query = '
 WITH input_shape AS (
- SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('$geomJSON'), 3857), 28992) geom
+ SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 3857), 28992) geom
 ),
 refraster AS (
  -- Reference raster
@@ -20,7 +20,7 @@ refraster AS (
 ),
 shape_outline_rast AS (
  -- Create raster of all cells which touch or are inside nzlijn polygon
- SELECT ST_AsRaster(geom, rast, '8BUI', 1, -1, true) rast FROM input_shape, refraster
+ SELECT ST_AsRaster(geom, rast, \'8BUI\', 1, -1, true) rast FROM input_shape, refraster
 ),
 shape_outline_pixels AS (
  -- Convert above raster to polygon
@@ -39,7 +39,7 @@ geotop_raster AS (
  -- Make Geotop raster of all pixels which touch or are inside nzlijn polygon
  SELECT ST_Union(ST_Clip(rast, ST_SetSRID(a.geom, 28992))) rast, z
  FROM geotop.rasters, shape_outline_pixels a, input_shape b
- WHERE ST_Intersects(rast, b.geom) AND z BETWEEN $lowerZ AND $upperZ
+ WHERE ST_Intersects(rast, b.geom) AND z BETWEEN $3 AND $2
  GROUP BY z
 ),
 geotop_values AS (
@@ -59,11 +59,11 @@ geotop_volumes AS (
 )
 
 SELECT lithoklasse, z, SUM(area) * 0.5 volume FROM geotop_volumes GROUP BY z, lithoklasse ORDER BY lithoklasse ASC, z DESC;
-";
+';
 
-$result = pg_query($conn, $query);
+$result = pg_query_params($conn, $query, array($geomJSON, $upperZ, $lowerZ));
 if (!$result) {
-  echo "Error executing database query.\n";
+  echo "Error executing database query: " . pg_last_error() . "\n";
   exit;
 }
 
