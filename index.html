@@ -351,7 +351,7 @@ function excavate() {
 		stopSpinner();
 		if (error) {
 			hideChart();
-			alertDialog("Error fetching data from database.");
+			alertDialog("Error fetching data from database.\n");
 			return;
 		}
 
@@ -464,8 +464,8 @@ function makeVolumeChart() {
 	// convert geotop array to data dictionary with cumulative volumes
 	for (var i = 0; i < geotopData.length; i++) {
 		var entry = geotopData[i],
-			lithoclass = entry[0],
-			z = entry[1],
+			z = entry[0],
+			lithoclass = entry[1],
 			volume = entry[2];
 		if (!data[lithoclass]) {
 			data[lithoclass] = {
@@ -509,13 +509,13 @@ function makeDepthChart() {
 	// convert geotop array to data dictionary
 	for (var i = 0; i < geotopData.length; i++) {
 		var entry = geotopData[i];
-		var lithoclass = entry[0];
-		var z = entry[1];
+		var z = entry[0];
+		var lithoclass = entry[1];
 		upperZ = Math.max(upperZ, z);
 		lowerZ = Math.min(lowerZ, z);
-		var volume = entry[2];
+		var probability = entry[3];
 		if (!data[lithoclass]) data[lithoclass] = {};
-		data[lithoclass][z] = volume;
+		data[lithoclass][z] = probability;
 	}
 	
 	// convert data dictionary back to array ready for depth chart
@@ -524,8 +524,8 @@ function makeDepthChart() {
 		var lithoclass = lithos[i];
 		var values = [];
 		for (var z = upperZ; z >= lowerZ; z = z - 0.5) {
-			var volume = (data[lithoclass] && data[lithoclass][z]) ? data[lithoclass][z] : 0;
-			values.push( { z: +z, volume: +volume } );
+			var probability = (data[lithoclass] && data[lithoclass][z]) ? data[lithoclass][z] : 0;
+			values.push( { z: +z, probability: +probability } );
 		}
 		depthChartData.push({
 			name: lithoclasses[lithoclass]['name'],

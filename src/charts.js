@@ -221,7 +221,7 @@ function DepthChart (svg, config) {
 		.offset("expand")
 		.values(function(d) { return d.values; })
 		.x(function(d) { return d.z; })
-		.y(function(d) { return d.volume; });
+		.y(function(d) { return d.probability; });
 
 	this.bisectDepth = d3.bisector(function(d) { return d.z; }).left; // used for the tooltip
 
