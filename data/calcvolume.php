@@ -5,7 +5,7 @@ $upperZ = $_REQUEST['upperZ'];
 $lowerZ = $_REQUEST['lowerZ'];
 
 header('Content-type: application/json');
-$conn = pg_pconnect("host=titania dbname=research user=postgres");
+$conn = pg_pconnect("host=metis port=5433 dbname=research user=postgres");
 if (!$conn) {
   echo "Unable to connect to the database\n";
   exit;
